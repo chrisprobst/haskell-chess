@@ -118,6 +118,7 @@ moves :: (Int, Int) -> Board -> Maybe [((Int, Int), MColoredPiece)]
 moves coord board = case getPiece coord board of
   Just (Create color piece) -> case piece of
     Pawn -> Just (pawnMoves coord color board)
+    Rook -> Just (rookMoves coord color board)
     _ -> Nothing
   _ -> Nothing
 
@@ -131,13 +132,32 @@ validMoves coord board =
   moves coord board >>=
   return . removeNothing . map checkMove
 
+----------------------------------------------------------------------------------
+----------------------------------------------------------------------------------
+-------------------- Piece moves -------------------------------------------------
+----------------------------------------------------------------------------------
+----------------------------------------------------------------------------------
+
+(.:) = (.) . (.)
+
+
+rookMoves :: (Int, Int) -> Color -> Board -> [((Int, Int), MColoredPiece)]
+rookMoves (c, r) color board = up ++ down ++ left ++ right
+  where
+    filter'' = map (flip (,) $ Nothing) .: takeWhile
+    up = filter'' (\coords -> isNothing (getPiece coords board)) [(c, r - i) | i <- [1..8]]
+    down= filter'' (\coords -> isNothing (getPiece coords board)) [(c, r + i) | i <- [1..8]]
+    left = filter'' (\coords -> isNothing (getPiece coords board)) [(c - i, r) | i <- [1..8]]
+    right = filter'' (\coords -> isNothing (getPiece coords board)) [(c + i,r) | i <- [1..8]]
+
+
 
 pawnMoves :: (Int, Int) -> Color -> Board -> [((Int, Int), MColoredPiece)]
 pawnMoves (c, r) color board =
-  forwardOnceMove ++ [
-  (forwardLeft, getPiece forwardLeft board),
-  (forwardRight, getPiece forwardRight board)
-  ] ++ forwardTwiceMove
+  forwardOnceMove ++
+  forwardOnceLeft ++
+  forwardOnceRight ++
+  forwardTwiceMove
     where
       forward = (c, r + one)
       forwardLeft = (c + 1, r + one)
@@ -145,15 +165,34 @@ pawnMoves (c, r) color board =
       forwardTwice = (c, r + one * 2)
       forwardPiece = getPiece forward board
       forwardTwicePiece = getPiece forwardTwice board
-      forwardOnceMove = case forwardPiece of
-        Nothing -> [(forward, Nothing)]
-        _ -> []
-      forwardTwiceMove =
-        if (r == 1 || r == 6) && isNothing forwardTwicePiece then [(forwardTwice, Nothing)] else []
-      one = case color of
-        White -> (-1)
-        Black -> 1
 
+      -- Check if there is a piece to kill
+      forwardOnceLeft =
+        maybeToList $ fmap ((,) forwardLeft . Just) (getPiece forwardLeft board)
+
+      -- Check if there is a piece to kill
+      forwardOnceRight =
+        maybeToList $ fmap ((,) forwardRight . Just) (getPiece forwardRight board)
+
+      -- Check if there is enough space
+      forwardOnceMove = if isNothing forwardPiece
+                        then [(forward, Nothing)] else []
+
+      -- Check if there is enough space
+      forwardTwiceMove =
+        if (r == 1 || r == 6) &&
+           isNothing forwardTwicePiece &&
+           isNothing forwardPiece
+        then [(forwardTwice, Nothing)] else []
+
+      -- Convert color to direction
+      one = if color == White then -1 else 1
+
+----------------------------------------------------------------------------------
+----------------------------------------------------------------------------------
+----------------------------------------------------------------------------------
+----------------------------------------------------------------------------------
+----------------------------------------------------------------------------------
 
 initBoard :: Board
 initBoard = [
