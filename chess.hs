@@ -9,8 +9,8 @@ import Control.Monad
 (.:) = (.) . (.)
 
 
-move :: (Int, Int) -> (Int, Int) -> [[Maybe a]] -> [[Maybe a]]
-move (x, y) (x2, y2) board = fullMat
+move :: [[Maybe a]] -> (Int, Int) -> (Int, Int) -> [[Maybe a]]
+move board (x, y) (x2, y2) = fullMat
   where
     elem = (board !! y) !! x
     fullMat = replace y2 fullRow emptyMat
@@ -25,8 +25,8 @@ replace i x xs = left ++ (x : (tail right))
     (left, right) = splitAt i xs
 
 
-get :: (Int, Int) -> [[a]] -> a
-get (c, r) xss = (xss !! r) !! c
+get :: [[a]] -> (Int, Int) -> a
+get xss (c, r)= (xss !! r) !! c
 
 
 checkCoords :: (Int, Int) -> Maybe (Int, Int)
@@ -35,8 +35,8 @@ checkCoords (c, r)
   | otherwise = Nothing
 
 
-getPiece :: (Int, Int) -> Board -> MColoredPiece
-getPiece coords board = checkCoords coords >>= (flip get) board
+getPiece :: Board -> (Int, Int) -> MColoredPiece
+getPiece board coords = checkCoords coords >>= get board
 
 
 removeNothing :: [Maybe a] -> [a]
@@ -112,19 +112,24 @@ extractColor :: MColoredPiece -> Maybe Color
 extractColor = fmap (\(Create color _) -> color)
 
 
-validMoves :: (Int, Int) -> Board -> Maybe [((Int, Int), MColoredPiece)]
-validMoves = fmap (removeNothing . map checkMove) .: moves
+validMoves :: Board -> (Int, Int) -> Maybe [((Int, Int), MColoredPiece)]
+validMoves board = (fmap (removeNothing . map checkMove)) . buildMoveFunc
   where
     -- Check the bounds
     checkMove (coords, mp) = fmap (const (coords, mp)) $ checkCoords coords
+
     -- Map the piece type to the specific function
-    moves coord board = case getPiece coord board of
-      Just (Create color piece) -> case piece of
-        Pawn -> Just (pawnMoves coord color board)
-        Rook -> Just (rookMoves coord color board)
-        Bishop -> Just (bishopMoves coord color board)
-        _ -> Nothing
-      _ -> Nothing
+    moveFunc Pawn = pawnMoves
+    moveFunc Rook = rookMoves
+    moveFunc Bishop = bishopMoves
+    moveFunc Queen = queenMoves
+    moveFunc King = kingMoves
+    moveFunc Knight = knightMoves
+
+    -- fmap the coords to all possible moves for the given piece
+    buildMoveFunc coords = fmap (\ (Create color piece) -> moveFunc piece board color coords) $
+                           getPiece board coords
+
 
 ----------------------------------------------------------------------------------
 ----------------------------------------------------------------------------------
@@ -132,10 +137,11 @@ validMoves = fmap (removeNothing . map checkMove) .: moves
 ----------------------------------------------------------------------------------
 ----------------------------------------------------------------------------------
 
-
+-- Universal movement for long running pieces
 collectPieces :: Board -> Color -> Direction -> Int -> (Int, Int) -> [((Int, Int), MColoredPiece)]
-collectPieces board ownColor dir n (c, r) = map (\p -> (p, getPiece p board)) . map halfTuple $
-                                            takeWhile verifyPosition dir2HistoricCoords
+collectPieces board ownColor dir n (c, r) =
+  map (\p -> (p, getPiece board p)) . map halfTuple $
+  takeWhile verifyPosition dir2HistoricCoords
   where
     halfTuple (_,_,x,y) = (x, y)
 
@@ -160,18 +166,18 @@ collectPieces board ownColor dir n (c, r) = map (\p -> (p, getPiece p board)) . 
         coords = (c, r)
         oldCoords = (oc, or)
 
-        piece = getPiece coords board
+        piece = getPiece board coords
         noPiece = isNothing piece
 
-        oldPiece = getPiece oldCoords board
+        oldPiece = getPiece board oldCoords
         noOldPiece = isNothing oldPiece
 
         color = fromJust $ extractColor piece
         oldColor = fromJust $ extractColor oldPiece
 
 
-rookMoves :: (Int, Int) -> Color -> Board -> [((Int, Int), MColoredPiece)]
-rookMoves coords color board = up ++ down ++ left ++ right
+rookMoves :: Board -> Color -> (Int, Int) -> [((Int, Int), MColoredPiece)]
+rookMoves board color coords = up ++ down ++ left ++ right
   where
     positions dir = collectPieces board color dir 8 coords
     up = positions N
@@ -180,8 +186,8 @@ rookMoves coords color board = up ++ down ++ left ++ right
     right = positions E
 
 
-bishopMoves :: (Int, Int) -> Color -> Board -> [((Int, Int), MColoredPiece)]
-bishopMoves coords color board = ne ++ nw ++ se ++ sw
+bishopMoves :: Board -> Color -> (Int, Int) -> [((Int, Int), MColoredPiece)]
+bishopMoves board color coords = ne ++ nw ++ se ++ sw
   where
     positions dir = collectPieces board color dir 8 coords
     ne = positions NE
@@ -190,8 +196,33 @@ bishopMoves coords color board = ne ++ nw ++ se ++ sw
     sw = positions SW
 
 
-pawnMoves :: (Int, Int) -> Color -> Board -> [((Int, Int), MColoredPiece)]
-pawnMoves (c, r) color board =
+queenMoves :: Board -> Color -> (Int, Int) -> [((Int, Int), MColoredPiece)]
+queenMoves board color coords = horiVerti ++ diagonal
+  where
+    horiVerti = rookMoves board color coords
+    diagonal = bishopMoves board color coords
+
+
+kingMoves :: Board -> Color -> (Int, Int) -> [((Int, Int), MColoredPiece)]
+kingMoves board color coords = n ++ s ++ e ++ w ++ ne ++ nw ++ se ++ sw
+  where
+    positions dir = collectPieces board color dir 1 coords
+    n = positions N
+    s = positions S
+    e = positions E
+    w = positions W
+    ne = positions NE
+    nw = positions NW
+    se = positions SE
+    sw = positions SW
+
+
+knightMoves :: Board -> Color -> (Int, Int) -> [((Int, Int), MColoredPiece)]
+knightMoves board color coords = undefined
+
+
+pawnMoves :: Board -> Color -> (Int, Int) -> [((Int, Int), MColoredPiece)]
+pawnMoves  board color (c, r) =
   forwardOnceMove ++
   forwardOnceLeft ++
   forwardOnceRight ++
@@ -201,16 +232,16 @@ pawnMoves (c, r) color board =
       forwardLeft = (c + 1, r + one)
       forwardRight = (c - 1, r + one)
       forwardTwice = (c, r + one * 2)
-      forwardPiece = getPiece forward board
-      forwardTwicePiece = getPiece forwardTwice board
+      forwardPiece = getPiece board forward
+      forwardTwicePiece = getPiece board forwardTwice
 
       -- Check if there is a piece to kill
       forwardOnceLeft =
-        maybeToList $ fmap ((,) forwardLeft . Just) (getPiece forwardLeft board)
+        maybeToList $ fmap ((,) forwardLeft . Just) (getPiece board forwardLeft)
 
       -- Check if there is a piece to kill
       forwardOnceRight =
-        maybeToList $ fmap ((,) forwardRight . Just) (getPiece forwardRight board)
+        maybeToList $ fmap ((,) forwardRight . Just) (getPiece board forwardRight)
 
       -- Check if there is enough space
       forwardOnceMove = if isNothing forwardPiece
@@ -270,6 +301,6 @@ printBoard = putStrLn . showBoard
 
 main = do
   let a = initBoard
-  let b = move (3, 1) (3, 5) a
+  let b = move a (3, 1) (3, 5)
   printBoard b
-  print $ validMoves (3, 5) b
+  print $ validMoves b (3, 5)
