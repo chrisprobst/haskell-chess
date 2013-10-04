@@ -90,12 +90,11 @@ showColoredPiece (Create color piece) =
 
 showMColoredPiece :: MColoredPiece -> Char
 showMColoredPiece Nothing = ' '
-showMColoredPiece (Just (Create color piece)) =
-  showColoredPiece (Create color piece)
+showMColoredPiece (Just x) = showColoredPiece x
 
 
 createMColoredPieces :: Color -> [Piece] -> [MColoredPiece]
-createMColoredPieces color = map (\p -> Just (Create color p))
+createMColoredPieces color = map (Just . Create color)
 
 
 getColor :: (Int, Int) -> Board -> Maybe Color
@@ -124,13 +123,11 @@ moves coord board = case getPiece coord board of
 
 
 checkMove :: ((Int, Int), MColoredPiece) -> Maybe ((Int, Int), MColoredPiece)
-checkMove (coords, mp) = checkCoords coords >>= return . const (coords, mp)
+checkMove (coords, mp) = fmap (const (coords, mp)) $ checkCoords coords
 
 
 validMoves :: (Int, Int) -> Board -> Maybe [((Int, Int), MColoredPiece)]
-validMoves coord board =
-  moves coord board >>=
-  return . removeNothing . map checkMove
+validMoves = fmap (removeNothing . map checkMove) .: moves
 
 ----------------------------------------------------------------------------------
 ----------------------------------------------------------------------------------
@@ -144,11 +141,10 @@ validMoves coord board =
 rookMoves :: (Int, Int) -> Color -> Board -> [((Int, Int), MColoredPiece)]
 rookMoves (c, r) color board = up ++ down ++ left ++ right
   where
-    filter'' = map (flip (,) $ Nothing) .: takeWhile
-    up = filter'' (\coords -> isNothing (getPiece coords board)) [(c, r - i) | i <- [1..8]]
-    down= filter'' (\coords -> isNothing (getPiece coords board)) [(c, r + i) | i <- [1..8]]
-    left = filter'' (\coords -> isNothing (getPiece coords board)) [(c - i, r) | i <- [1..8]]
-    right = filter'' (\coords -> isNothing (getPiece coords board)) [(c + i,r) | i <- [1..8]]
+    up = map (\coords -> (coords, getPiece coords board)) [(c, r - i) | i <- [1..8], isJust (getPiece (c, r - (i-1)) board)]
+    down = map (\coords -> (coords, getPiece coords board)) [(c, r + i) | i <- [1..8], isJust (getPiece (c, r + (i-1)) board)]
+    left = map (\coords -> (coords, getPiece coords board)) [(c - i, r) | i <- [1..8], isJust (getPiece (c - (i-1), r) board)]
+    right = map (\coords -> (coords, getPiece coords board)) [(c + i, r) | i <- [1..8], isJust (getPiece (c + (i-1), r) board)]
 
 
 
