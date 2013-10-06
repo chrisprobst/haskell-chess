@@ -70,8 +70,10 @@ data Color = White | Black
            deriving (Show, Eq)
 
 
-data ColoredPiece = Create Color Piece
-                  deriving (Show, Eq)
+data ColoredPiece = Create {
+  pieceColor :: Color,
+  pieceType :: Piece
+  } deriving (Show, Eq)
 
 
 type MColoredPiece = Maybe ColoredPiece
@@ -80,40 +82,68 @@ type MColoredPiece = Maybe ColoredPiece
 type Board = [[MColoredPiece]]
 
 
-showPiece :: Piece -> Char
-showPiece Pawn = 'P'
-showPiece Rook = 'R'
-showPiece Knight = 'N'
-showPiece Bishop = 'B'
-showPiece Queen = 'Q'
-showPiece King = 'K'
-
-
-setColor :: Color -> Char -> Char
-setColor White = toUpper
-setColor Black = toLower
-
-
-showColoredPiece :: ColoredPiece -> Char
-showColoredPiece (Create color piece) =
-  setColor color (showPiece piece)
-
-
 showMColoredPiece :: MColoredPiece -> Char
-showMColoredPiece Nothing = ' '
-showMColoredPiece (Just x) = showColoredPiece x
+showMColoredPiece = maybe ' ' showColoredPiece
+  where
+    showColoredPiece (Create color piece) = color2Case color (showPiece piece)
+
+    color2Case White = toUpper
+    color2Case Black = toLower
+
+    showPiece Pawn = 'P'
+    showPiece Rook = 'R'
+    showPiece Knight = 'N'
+    showPiece Bishop = 'B'
+    showPiece Queen = 'Q'
+    showPiece King = 'K'
 
 
-createMColoredPieces :: Color -> [Piece] -> [MColoredPiece]
-createMColoredPieces = map . (Just .: Create)
+initBoard :: Board
+initBoard = [
+  createMColoredPieces Black [Rook,
+                             Knight,
+                             Bishop,
+                             Queen,
+                             King,
+                             Bishop,
+                             Knight,
+                             Rook],
+  replicate 8 (Just (Create Black Pawn)),
+  replicate 8 Nothing,
+  replicate 8 Nothing,
+  replicate 8 Nothing,
+  replicate 8 Nothing,
+  replicate 8 (Just (Create White Pawn)),
+  createMColoredPieces White [Rook,
+                             Knight,
+                             Bishop,
+                             Queen,
+                             King,
+                             Bishop,
+                             Knight,
+                             Rook]
+  ]
+  where
+    createMColoredPieces = map . (Just .: Create)
 
 
-extractColor :: MColoredPiece -> Maybe Color
-extractColor = fmap (\(Create color _) -> color)
+showBoard :: Board -> String
+showBoard = unlines . (map . map) showMColoredPiece
+
+
+printBoard :: Board -> IO ()
+printBoard = putStrLn . showBoard
+
+
+----------------------------------------------------------------------------------
+----------------------------------------------------------------------------------
+-------------------- Piece moves -------------------------------------------------
+----------------------------------------------------------------------------------
+----------------------------------------------------------------------------------
 
 
 validMoves :: Board -> (Int, Int) -> Maybe [((Int, Int), MColoredPiece)]
-validMoves board = (fmap (removeNothing . map checkMove)) . buildMoveFunc
+validMoves board = (fmap $ removeNothing . map checkMove) . buildMoveFunc
   where
     -- Check the bounds
     checkMove (coords, mp) = fmap (const (coords, mp)) $ checkCoords coords
@@ -127,15 +157,10 @@ validMoves board = (fmap (removeNothing . map checkMove)) . buildMoveFunc
     moveFunc Knight = knightMoves
 
     -- fmap the coords to all possible moves for the given piece
-    buildMoveFunc coords = fmap (\ (Create color piece) -> moveFunc piece board color coords) $
-                           getPiece board coords
+    buildMoveFunc coords =
+      fmap (\ (Create color piece) -> moveFunc piece board color coords) $
+      getPiece board coords
 
-
-----------------------------------------------------------------------------------
-----------------------------------------------------------------------------------
--------------------- Piece moves -------------------------------------------------
-----------------------------------------------------------------------------------
-----------------------------------------------------------------------------------
 
 -- Universal movement for long running pieces
 collectPieces :: Board -> Color -> Direction -> Int -> (Int, Int) -> [((Int, Int), MColoredPiece)]
@@ -163,6 +188,8 @@ collectPieces board ownColor dir n (c, r) =
     verifyPosition  (oc, or, c, r) =
       noPiece || (color /= ownColor && (noOldPiece || oldColor == ownColor))
       where
+        extractColor = fmap pieceColor
+
         coords = (c, r)
         oldCoords = (oc, or)
 
@@ -218,7 +245,44 @@ kingMoves board color coords = n ++ s ++ e ++ w ++ ne ++ nw ++ se ++ sw
 
 
 knightMoves :: Board -> Color -> (Int, Int) -> [((Int, Int), MColoredPiece)]
-knightMoves board color coords = undefined
+knightMoves board color (c, r) =
+  position upLeft ++
+  position upRight ++
+  position downLeft ++
+  position downRight ++
+  position leftUp ++
+  position leftDown ++
+  position rightUp ++
+  position rightDown
+
+  where
+    up = -1
+    up2 = 2 * up
+    down = 1
+    down2 = 2 * down
+    left = -1
+    left2 = 2 * left
+    right = 1
+    right2 = 2 * right
+
+    upLeft = (c + left, r + up2)
+    upRight = (c + right, r + up2)
+
+    downLeft = (c + left, r + down2)
+    downRight = (c + right, r + down2)
+
+    rightUp = (c + right2, r + up)
+    rightDown = (c + right2, r + down)
+
+    leftUp = (c + left2, r + up)
+    leftDown = (c + left2, r + down)
+
+    position coords = if hasEnemy && color == enemyColor
+                      then [] else [(coords, enemy)]
+      where
+        enemy = getPiece board coords
+        enemyColor = fromJust $ fmap pieceColor enemy
+        hasEnemy = isJust enemy
 
 
 pawnMoves :: Board -> Color -> (Int, Int) -> [((Int, Int), MColoredPiece)]
@@ -257,46 +321,13 @@ pawnMoves  board color (c, r) =
       -- Convert color to direction
       one = if color == White then -1 else 1
 
+
 ----------------------------------------------------------------------------------
 ----------------------------------------------------------------------------------
 ----------------------------------------------------------------------------------
 ----------------------------------------------------------------------------------
 ----------------------------------------------------------------------------------
 
-initBoard :: Board
-initBoard = [
-  createMColoredPieces Black [Rook,
-                             Knight,
-                             Bishop,
-                             Queen,
-                             King,
-                             Bishop,
-                             Knight,
-                             Rook],
-  replicate 8 (Just (Create Black Pawn)),
-  replicate 8 Nothing,
-  replicate 8 Nothing,
-  replicate 8 Nothing,
-  replicate 8 Nothing,
-  replicate 8 (Just (Create White Pawn)),
-
-  createMColoredPieces White [Rook,
-                             Knight,
-                             Bishop,
-                             Queen,
-                             King,
-                             Bishop,
-                             Knight,
-                             Rook]
-  ]
-
-
-showBoard :: Board -> String
-showBoard = unlines . (map . map) showMColoredPiece
-
-
-printBoard :: Board -> IO ()
-printBoard = putStrLn . showBoard
 
 
 main = do
