@@ -2,6 +2,8 @@ module Chess.Types where
 
 import Utils
 
+import Data.List
+import Data.Maybe
 import Data.Char
 
 
@@ -45,6 +47,13 @@ getPiece :: Board -> (Int, Int) -> MColoredPiece
 getPiece board coords = checkCoords coords >>= get board
 
 
+movePiece :: (Board, [ColoredPiece]) -> (Int, Int) -> (Int, Int) -> (Board, [ColoredPiece])
+movePiece (board, pieces) from to = (nextBoard, nextPieces)
+  where
+    (nextBoard, mPiece) = move board from to
+    nextPieces = maybe pieces (flip delete $ pieces) mPiece
+
+
 showMColoredPiece :: MColoredPiece -> Char
 showMColoredPiece = maybe ' ' showColoredPiece
   where
@@ -61,33 +70,36 @@ showMColoredPiece = maybe ' ' showColoredPiece
     showPiece King = 'K'
 
 
-initBoard :: Board
-initBoard = [
-  createMColoredPieces Black [Rook,
-                             Knight,
-                             Bishop,
-                             Queen,
-                             King,
-                             Bishop,
-                             Knight,
-                             Rook],
-  replicate 8 (Just (Create Black Pawn)),
-  replicate 8 Nothing,
-  replicate 8 Nothing,
-  replicate 8 Nothing,
-  replicate 8 Nothing,
-  replicate 8 (Just (Create White Pawn)),
-  createMColoredPieces White [Rook,
-                             Knight,
-                             Bishop,
-                             Queen,
-                             King,
-                             Bishop,
-                             Knight,
-                             Rook]
-  ]
+initBoard :: (Board, [ColoredPiece])
+initBoard = (board, pieces)
   where
     createMColoredPieces = map . (Just .: Create)
+    board = [
+      createMColoredPieces Black [Rook,
+                                  Knight,
+                                  Bishop,
+                                  Queen,
+                                  King,
+                                  Bishop,
+                                  Knight,
+                                  Rook],
+      replicate 8 (Just (Create Black Pawn)),
+      replicate 8 Nothing,
+      replicate 8 Nothing,
+      replicate 8 Nothing,
+      replicate 8 Nothing,
+      replicate 8 (Just (Create White Pawn)),
+      createMColoredPieces White [Rook,
+                                  Knight,
+                                  Bishop,
+                                  Queen,
+                                  King,
+                                  Bishop,
+                                  Knight,
+                                  Rook]
+      ]
+    pieces = (map fromJust . filter isJust . concat) board
+
 
 
 showBoard :: Board -> String

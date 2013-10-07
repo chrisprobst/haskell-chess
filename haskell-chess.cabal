@@ -15,6 +15,6 @@ build-type:          Simple
 cabal-version:       >=1.8
 
 library
-  exposed-modules:     Chess.Types, Chess.Moves
+  exposed-modules:     Chess.Types, Chess.Moves, Chess.Logic
   -- other-modules:
   build-depends:       base ==4.6.*, haskell-utils ==0.1.*
